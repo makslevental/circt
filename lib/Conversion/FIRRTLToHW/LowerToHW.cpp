@@ -2423,7 +2423,7 @@ void FIRRTLLowering::initializeRegister(Value reg) {
           })
           .Case<hw::StructType>([&](hw::StructType s) {
             for (auto elem : s.getElements())
-              recurse(reg, elem.type, accessor + "." + elem.name.getValue());
+              recurse(reg, elem.type, accessor + ".f_" + elem.name.getValue());
           })
           .Default([&](auto type) { emitRandomInit(reg, type, accessor); });
     };
