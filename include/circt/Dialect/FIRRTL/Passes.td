@@ -382,4 +382,9 @@ def InferReadWrite : Pass<"firrtl-infer-rw", "firrtl::FModuleOp"> {
   let constructor = "circt::firrtl::createInferReadWritePass()";
 }
 
+def MergeConnections : Pass<"merge-connections", "firrtl::FModuleOp"> {
+  let summary = "Merge field-level connections into full bundle connections";
+  let constructor = "circt::firrtl::createMergeConnectionsPass()";
+}
+
 #endif // CIRCT_DIALECT_FIRRTL_PASSES_TD
