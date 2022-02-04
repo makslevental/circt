@@ -301,8 +301,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
 
   void visitConnect(ConnectOp connect, FieldRef changedValue);
   void visitPartialConnect(PartialConnectOp connect);
-  void visitRegResetOp(RegResetOp connect, FieldRef changedValue) {}
-  void visitSubelementAccess(Operation *op);
+  void visitRegResetOp(RegResetOp connect, FieldRef changedValue);
   void visitOperation(Operation *op, FieldRef changedValue);
 
 private:
@@ -632,6 +631,29 @@ void IMConstPropPass::visitConnect(ConnectOp connect, FieldRef changedValue) {
 
 void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
+}
+
+void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
+                                      FieldRef changedValue) {
+  auto src = regReset.resetValue();
+  auto srcFieldRef = getFieldRefFromValue(regReset.resetValue());
+  auto srcFieldID = srcFieldRef.getFieldID();
+  auto srcFieldRoot = srcFieldRef.getValue();
+  if (srcFieldRoot != changedValue.getValue())
+    return;
+
+  auto maxFieldID = src.getType().cast<FIRRTLType>().getMaxFieldID();
+  if (!(srcFieldID <= changedValue.getFieldID() &&
+        srcFieldID + maxFieldID >= changedValue.getFieldID()))
+    return;
+
+  auto relativeFieldID = changedValue.getFieldID() - srcFieldID;
+
+  auto destLeafType = regReset.getType().getFinalTypeByFieldID(relativeFieldID);
+
+  auto srcValue = getExtendedLatticeValue(srcFieldRef, destLeafType,
+                                          /*allowTruncation=*/true);
+  mergeLatticeValue({regReset, relativeFieldID}, srcValue);
 }
 
 /// This method is invoked when an operand of the specified op changes its
