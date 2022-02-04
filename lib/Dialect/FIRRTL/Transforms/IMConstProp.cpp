@@ -421,6 +421,14 @@ LatticeValue IMConstPropPass::getExtendedLatticeValue(FieldRef value,
   return LatticeValue(IntegerAttr::get(destType.getContext(), resultConstant));
 }
 
+void IMConstPropPass::markSubelementAccessOp(Operation *subelementAccess) {
+  auto result = subelementAccess->getResult(0);
+  if (!result.getType().cast<FIRRTLType>().isGround())
+    return;
+  auto fieldRef = getFieldRefFromValue(result);
+  rootToChildrenSubelementAccess[fieldRef].push_back(result);
+}
+
 /// Mark a block executable if it isn't already.  This does an initial scan of
 /// the block, processing nullary operations like wires, instances, and
 /// constants that only get processed once.
@@ -443,6 +451,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markInstanceOp(instance);
     else if (auto regReset = dyn_cast<RegResetOp>(op))
       markRegResetOp(regReset);
+    else if (isa<SubfieldOp, SubindexOp>(op))
+      markSubelementAccessOp(&op);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
   }
