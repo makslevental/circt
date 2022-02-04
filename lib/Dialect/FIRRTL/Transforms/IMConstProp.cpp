@@ -42,6 +42,16 @@ static bool isDeletableWireOrReg(Operation *op) {
   return isWireOrReg(op) && !hasDontTouch(op);
 }
 
+static bool assertFieldRefPointToLeaf(FieldRef fieldRef) {
+  auto rootValue = fieldRef.getValue();
+  auto id = fieldRef.getFieldID();
+  auto ty = rootValue.getType().cast<FIRRTLType>().getFinalTypeByFieldID(id);
+  if (!ty.isGround()) {
+    llvm::dbgs() << "ERROR IMCP: " << rootValue << " @ " << id << "\n";
+  }
+  return true;
+}
+
 /// This function recursively applies `fn` to leaf ground types of `type`.
 static void
 foreachFIRRTLGroundType(FIRRTLType type,
@@ -264,6 +274,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(FieldRef fieldRef, LatticeValue &valueEntry,
                          LatticeValue source) {
+    assertFieldRefPointToLeaf(fieldRef);
     assert(isRoot(fieldRef) && "value must be known to be root beforehand");
     if (!source.isOverdefined() &&
         hasDontTouch(getFieldRefFromFieldRef(fieldRef).getValue()))
@@ -344,7 +355,8 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
       return;
 
     fieldRef = getFieldRefFromFieldRef(fieldRef);
-    if (!source.isOverdefined() && hasDontTouch(getFieldRefFromFieldRef(fieldRef).getValue()))
+    if (!source.isOverdefined() &&
+        hasDontTouch(getFieldRefFromFieldRef(fieldRef).getValue()))
       source = LatticeValue::getOverdefined();
     // If we've changed this value then revisit all the users.
     auto &valueEntry = latticeValues[fieldRef];
@@ -791,8 +803,12 @@ void IMConstPropPass::visitConnect(ConnectOp connect, FieldRef changedValue) {
   if (srcValue.isUnknown())
     return;
 
-  auto dest = getFieldRefFromValue(connect.dest()).getValue();
-  auto destFieldID = getFieldRefFromValue(connect.dest()).getFieldID();
+  auto destFieldRef =
+      getFieldRefFromValue(connect.dest())
+          .getSubField(changedValue.getFieldID() -
+                       getFieldRefFromValue(connect.src()).getFieldID());
+  auto dest = destFieldRef.getValue();
+  auto destFieldID = destFieldRef.getFieldID();
   // Driving result ports propagates the value to each instance using the
   // module.
   if (auto blockArg = dest.dyn_cast<BlockArgument>()) {
