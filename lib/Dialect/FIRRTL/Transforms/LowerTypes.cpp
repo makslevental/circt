@@ -461,7 +461,7 @@ ArrayAttr TypeLoweringVisitor::filterAnnotations(
     if (Annotation(opAttr).getClass() ==
         "firrtl.transforms.DontTouchAnnotation") {
       hasDontTouch = true;
-      continue;
+      // continue;
     }
     // If this subfield has a nonlocal anchor, then we need to update the
     // NLA with the new symbol that would be added to the field after
@@ -600,8 +600,15 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   SmallVector<FlatBundleFieldEntry> fieldTypes;
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
   if (!peelType(srcType, fieldTypes,
-                isModuleAllowedToPreserveAggregate(module)))
+                isModuleAllowedToPreserveAggregate(module))) {
+    // if (!newArgs[argIndex].annotations.empty() &&
+    //    (!newArgs[argIndex].sym || newArgs[argIndex].sym.getValue().empty())) {
+
+      newArgs[argIndex].sym = StringAttr::get(
+          module->getContext(), "SYM_" + newArgs[argIndex].name.getValue());
+    // }
     return false;
+  }
 
   for (auto field : llvm::enumerate(fieldTypes)) {
     auto newValue = addArg(module, 1 + argIndex + field.index(), srcType,
