@@ -623,7 +623,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect, FieldRef changedValue) {
   // automatically propagates to users.
 
   if (dest.getDefiningOp() && isWireOrReg(dest.getDefiningOp()))
-    return mergeLatticeValue({dest, destFieldID}, srcValue);
+    return mergeLatticeValue(destFieldRef, srcValue);
 
   // Driving an instance argument port drives the corresponding argument of the
   // referenced module.
