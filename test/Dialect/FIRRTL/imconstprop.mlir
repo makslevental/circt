@@ -737,8 +737,12 @@ firrtl.circuit "DontTouchAggregate" {
 // -----
 
 firrtl.circuit "OutPortTop" {
-  // fieldID 1 means the first element. Check that we don't propagate througth it.
-  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2> [#firrtl.subAnno<fieldID = 1, {class = "firrtl.transforms.DontTouchAnnotation"}>]) {
+  // Check that we don't propagate througth it.
+  firrtl.module @OutPortChild(out %out: !firrtl.vector<uint<1>, 2>) attributes {
+    portAnnotations = [[]],
+    portSyms = ["dntSym"]
+  }
+  {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %0 = firrtl.subindex %out[0] : !firrtl.vector<uint<1>, 2>
     %1 = firrtl.subindex %out[1] : !firrtl.vector<uint<1>, 2>
@@ -754,11 +758,164 @@ firrtl.circuit "OutPortTop" {
     firrtl.connect %out2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     // Make sure that we don't propagate through %c_out[0].
     // FIXME: Currently, we are not propagating through %c_out[1] too because
-    // we don't look at DontTouchAnnotation in the field sensitive way.
+    // we don't look at symbols in the field sensitive way.
 
     // CHECK:      %0 = firrtl.subindex %c_out[0] : !firrtl.vector<uint<1>, 2>
     // CHECK-NEXT: %1 = firrtl.subindex %c_out[1] : !firrtl.vector<uint<1>, 2>
     // CHECK-NEXT: firrtl.connect %out1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK-NEXT: firrtl.connect %out2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// CHECK-LABK: firrtl.circuit "rhs_sink_output_used_as_wire"
+firrtl.circuit "rhs_sink_output_used_as_wire" {
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar(in %a: !firrtl.bundle<v: uint<1>>, in %b: !firrtl.bundle<v: uint<1>>, out %c: !firrtl.bundle<v: uint<1>>, out %d: !firrtl.bundle<v: uint<1>>) {
+    %0 = firrtl.subfield %d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %_c = firrtl.wire  : !firrtl.bundle<v: uint<1>>
+    %4 = firrtl.subfield %_c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %5 = firrtl.xor %1, %3 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK: firrtl.xor
+    firrtl.connect %4, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.module @rhs_sink_output_used_as_wire(in %a: !firrtl.bundle<v: uint<1>>, in %b: !firrtl.bundle<v: uint<1>>, out %c: !firrtl.bundle<v: uint<1>>, out %d: !firrtl.bundle<v: uint<1>>) {
+    %bar_a, %bar_b, %bar_c, %bar_d = firrtl.instance bar  @Bar(in a: !firrtl.bundle<v: uint<1>>, in b: !firrtl.bundle<v: uint<1>>, out c: !firrtl.bundle<v: uint<1>>, out d: !firrtl.bundle<v: uint<1>>)
+    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %bar_a(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.subfield %b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %bar_b(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %3, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %4 = firrtl.subfield %bar_c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %5 = firrtl.subfield %c(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %5, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+    %6 = firrtl.subfield %bar_d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    %7 = firrtl.subfield %d(0) : (!firrtl.bundle<v: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %7, %6 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+// -----
+// CHECK-LABEL: "Oscillators"
+firrtl.circuit "Oscillators"  {
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: firrtl.reg
+    // CHECK-NEXT: firrtl.regreset
+    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %3 = firrtl.not %s : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %s, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    %4 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %1, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: firrtl.reg
+    // CHECK-NEXT: firrtl.regreset
+    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.xor %1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %s, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %3 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %0, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+
+  // CHECK: firrtl.module @Baz
+  firrtl.module @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: firrtl.reg
+    // CHECK-NEXT: firrtl.regreset
+    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %2 = firrtl.not %1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %s, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    %3 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %0, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %1, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  firrtl.extmodule @Ext(in a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+
+  // CHECK: firrtl.module @Qux
+  firrtl.module @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.subfield %a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %ext_a = firrtl.instance ext  @Ext(in a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+    %2 = firrtl.subfield %ext_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %ext_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    // CHECK: firrtl.reg
+    // CHECK-NEXT: firrtl.regreset
+    %r = firrtl.reg %clock  : !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %4 = firrtl.not %3 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %r, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %s, %4 : !firrtl.uint<1>, !firrtl.uint<1>
+    %5 = firrtl.or %r, %s : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.connect %2, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %3, %5 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %1, %2 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %3 : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @Oscillators
+  firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %foo_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %bar_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %baz_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>, out %qux_a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>) {
+    %0 = firrtl.subfield %qux_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %1 = firrtl.subfield %qux_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %2 = firrtl.subfield %baz_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %3 = firrtl.subfield %baz_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %4 = firrtl.subfield %bar_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %5 = firrtl.subfield %bar_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %6 = firrtl.subfield %foo_a(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %7 = firrtl.subfield %foo_a(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance foo  @Foo(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+    %8 = firrtl.subfield %foo_a_0(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %9 = firrtl.subfield %foo_a_0(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %foo_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %foo_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %7, %9 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %6, %8 : !firrtl.uint<1>, !firrtl.uint<1>
+    %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance bar  @Bar(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+    %10 = firrtl.subfield %bar_a_1(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %11 = firrtl.subfield %bar_a_1(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %bar_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %bar_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %5, %11 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %4, %10 : !firrtl.uint<1>, !firrtl.uint<1>
+    %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance baz  @Baz(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+    %12 = firrtl.subfield %baz_a_2(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %13 = firrtl.subfield %baz_a_2(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %baz_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %baz_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %3, %13 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %2, %12 : !firrtl.uint<1>, !firrtl.uint<1>
+    %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance qux  @Qux(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.bundle<v1: uint<1>, v2: uint<1>>)
+    %14 = firrtl.subfield %qux_a_3(1) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    %15 = firrtl.subfield %qux_a_3(0) : (!firrtl.bundle<v1: uint<1>, v2: uint<1>>) -> !firrtl.uint<1>
+    firrtl.connect %qux_clock, %clock : !firrtl.clock, !firrtl.clock
+    firrtl.connect %qux_reset, %reset : !firrtl.asyncreset, !firrtl.asyncreset
+    firrtl.connect %1, %15 : !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.connect %0, %14 : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
