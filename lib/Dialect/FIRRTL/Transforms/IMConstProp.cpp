@@ -654,8 +654,6 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
-
-
 void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
                                       FieldRef changedValue) {
   auto offsetOpt =
@@ -692,18 +690,21 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedValue) {
     return;
   // TODO: Handle 'when' operations.
 
-  bool encounterNonGroundType = false;
+  bool hasNonGoundTypeOperand = false;
   // If all of the results of this operation are already overdefined (or if
   // there are no results) then bail out early: we've converged.
   auto isOverdefinedFn = [&](Value value) {
-    encounterNonGroundType |= !value.getType().cast<FIRRTLType>().isGround();
+    if (!value.getType().cast<FIRRTLType>().isGround()) {
+      hasNonGoundTypeOperand = true;
+      return false;
+    }
     return isOverdefined(getFieldRefFromValue(value));
   };
 
   if (llvm::all_of(op->getResults(), isOverdefinedFn))
     return;
 
-  if (encounterNonGroundType) {
+  if (hasNonGoundTypeOperand) {
     for (auto value : op->getResults())
       markOverdefined(value);
     return;
