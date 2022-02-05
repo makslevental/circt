@@ -335,6 +335,7 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   void markBlockExecutable(Block *block);
   void markWireOrUnresetableRegOp(Operation *wireOrReg);
   void markRegResetOp(RegResetOp regReset);
+  void markConnectOp(ConnectOp connect);
   void markMemOp(MemOp mem);
 
   void markSubelementAccessOp(Operation *op);
@@ -499,6 +500,8 @@ void IMConstPropPass::markBlockExecutable(Block *block) {
       markSubelementAccessOp(&op);
     else if (auto mem = dyn_cast<MemOp>(op))
       markMemOp(mem);
+    else if (auto connect = dyn_cast<ConnectOp>(op))
+      markConnectOp(connect);
   }
 }
 
@@ -526,6 +529,11 @@ void IMConstPropPass::markRegResetOp(RegResetOp regReset) {
                                     /*allowTruncation=*/true);
         mergeLatticeValue({regReset, id}, srcValue);
       });
+}
+
+void IMConstPropPass::markConnectOp(ConnectOp connect) {
+  if (!connect.src().getType().cast<FIRRTLType>().isGround())
+    connect.emitError() << "IMCP assumes that connections are fully expanded";
 }
 
 void IMConstPropPass::markMemOp(MemOp mem) {
