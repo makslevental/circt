@@ -601,12 +601,11 @@ bool TypeLoweringVisitor::lowerArg(Operation *module, size_t argIndex,
   auto srcType = newArgs[argIndex].type.cast<FIRRTLType>();
   if (!peelType(srcType, fieldTypes,
                 isModuleAllowedToPreserveAggregate(module))) {
-    // if (!newArgs[argIndex].annotations.empty() &&
-    //    (!newArgs[argIndex].sym || newArgs[argIndex].sym.getValue().empty())) {
-
+    if (!newArgs[argIndex].annotations.empty() &&
+        (!newArgs[argIndex].sym || newArgs[argIndex].sym.getValue().empty())) {
       newArgs[argIndex].sym = StringAttr::get(
           module->getContext(), "SYM_" + newArgs[argIndex].name.getValue());
-    // }
+    }
     return false;
   }
 
@@ -951,8 +950,9 @@ bool TypeLoweringVisitor::visitDecl(MemOp op) {
                 for (size_t repeat = 0; repeat < m.value(); repeat++)
                   if (m.index() == 0 && repeat == 0)
                     catMasks = mBit;
-                  else if (isVector)
-                    catMasks = builder->createOrFold<CatPrimOp>(mBit, catMasks);
+                  /*else if (isVector)
+                    catMasks = builder->createOrFold<CatPrimOp>(mBit,
+                    catMasks);*/
                   else
                     catMasks = builder->createOrFold<CatPrimOp>(catMasks, mBit);
               }
@@ -1207,8 +1207,7 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
   // UInt type result. That is, first bitcast the aggregate type to a UInt.
   // Attempt to get the bundle types.
   SmallVector<FlatBundleFieldEntry> fields;
-  if (peelType(op.input().getType(), fields,
-               /* allowedToPreserveAggregate */ false)) {
+  if (peelType(op.input().getType(), fields, false)) {
     size_t uptoBits = 0;
     // Loop over the leaf aggregates and concat each of them to get a UInt.
     // Bitcast the fields to handle nested aggregate types.
@@ -1224,19 +1223,21 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
       // Take the first field, or else Cat the previous fields with this field.
       if (uptoBits == 0)
         srcLoweredVal = src;
-      else if (op.input().getType().isa<FVectorType>())
+      else /* if (op.input().getType().isa<FVectorType>())*/
         srcLoweredVal = builder->create<CatPrimOp>(src, srcLoweredVal);
+      /*
       else
-        srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);
+        srcLoweredVal = builder->create<CatPrimOp>(srcLoweredVal, src);*/
       // Record the total bits already accumulated.
       uptoBits += fieldBitwidth;
     }
   } else {
-    srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
+    if (op.input().getType().cast<FIRRTLType>().isGround())
+      srcLoweredVal = builder->createOrFold<AsUIntPrimOp>(srcLoweredVal);
   }
   // Now the input has been cast to srcLoweredVal, which is of UInt type.
   // If the result is an aggregate type, then use lowerProducer.
-  if (op.getResult().getType().isa<FVectorType>()) {
+  if (op.getResult().getType().isa<FVectorType, BundleType>()) {
     // uptoBits is used to keep track of the bits that have been extracted.
     size_t uptoBits = 0;
     auto clone = [&](FlatBundleFieldEntry field, StringRef name,
@@ -1258,29 +1259,31 @@ bool TypeLoweringVisitor::visitExpr(BitCastOp op) {
     return lowerProducer(op, clone);
   }
 
-  if (op.getResult().getType().isa<BundleType>()) {
-    // uptoBits is used to keep track of the bits that have been extracted.
-    size_t uptoBits =
-        getBitWidth(op.getResult().getType().cast<FIRRTLType>()).getValue();
-    auto clone = [&](FlatBundleFieldEntry field, StringRef name,
-                     ArrayAttr attrs) -> Operation * {
-      // All the fields must have valid bitwidth, a requirement for BitCastOp.
-      auto fieldBits = getBitWidth(field.type).getValue();
-      // If empty field, then it doesnot have any use, so replace it with an
-      // invalid op, which should be trivially removed.
-      if (fieldBits == 0)
-        return builder->create<InvalidValueOp>(field.type);
+  /*
+    if (op.getResult().getType().isa<BundleType>()) {
+      // uptoBits is used to keep track of the bits that have been extracted.
+      size_t uptoBits =
+          getBitWidth(op.getResult().getType().cast<FIRRTLType>()).getValue();
+      auto clone = [&](FlatBundleFieldEntry field, StringRef name,
+                       ArrayAttr attrs) -> Operation * {
+        // All the fields must have valid bitwidth, a requirement for BitCastOp.
+        auto fieldBits = getBitWidth(field.type).getValue();
+        // If empty field, then it doesnot have any use, so replace it with an
+        // invalid op, which should be trivially removed.
+        if (fieldBits == 0)
+          return builder->create<InvalidValueOp>(field.type);
 
-      auto end = uptoBits - 1;
-      auto start = uptoBits - fieldBits;
-      // Assign the field to the corresponding bits from the input.
-      // Bitcast the field, incase its an aggregate type.
-      auto extractBits = builder->create<BitsPrimOp>(srcLoweredVal, end, start);
-      uptoBits -= fieldBits;
-      return builder->create<BitCastOp>(field.type, extractBits);
-    };
-    return lowerProducer(op, clone);
-  }
+        auto end = uptoBits - 1;
+        auto start = uptoBits - fieldBits;
+        // Assign the field to the corresponding bits from the input.
+        // Bitcast the field, incase its an aggregate type.
+        auto extractBits = builder->create<BitsPrimOp>(srcLoweredVal, end,
+    start); uptoBits -= fieldBits; return builder->create<BitCastOp>(field.type,
+    extractBits);
+      };
+      return lowerProducer(op, clone);
+    }
+    */
 
   // If ground type, then replace the result.
   if (op.getType().dyn_cast<SIntType>())
