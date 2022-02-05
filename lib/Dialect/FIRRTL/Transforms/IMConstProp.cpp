@@ -16,6 +16,9 @@
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Debug.h"
+
+#define DEBUG_TYPE "firrtl-imcp"
 
 using namespace circt;
 using namespace firrtl;
@@ -214,6 +217,24 @@ private:
   /// kind.  The attribute is always an IntegerAttr.
   llvm::PointerIntPair<Attribute, 2, Kind> valueAndTag;
 };
+
+raw_ostream &operator<<(raw_ostream &os, const FieldRef &fieldRef) {
+  return os << circt::firrtl::getFieldName(fieldRef);
+}
+
+raw_ostream &operator<<(raw_ostream &os, const LatticeValue &lattice) {
+  if (lattice.isInvalidValue())
+    return os << "<invalid>";
+  if (lattice.isUnknown())
+    return os << "<unknown>";
+  if (lattice.isConstant())
+    return os << "<constant: " << lattice.getConstant() << ">";
+  if (lattice.isOverdefined())
+    return os << "<overdefined>";
+
+  llvm_unreachable("Lattice must have exactly one state");
+}
+
 } // end anonymous namespace
 
 namespace {
@@ -254,12 +275,18 @@ struct IMConstPropPass : public IMConstPropBase<IMConstPropPass> {
   /// revisitation.
   void mergeLatticeValue(FieldRef value, LatticeValue &valueEntry,
                          LatticeValue source) {
+    LLVM_DEBUG(llvm::dbgs() << "[IMCP][MergeLattice]" << value << " current: "
+                            << valueEntry << " source: " << source << "\n";);
     if (!source.isOverdefined() &&
         (!isa_and_nonnull<InstanceOp>(value.getDefiningOp()) &&
-         hasDontTouch(value)))
+         hasDontTouch(value))) {
+      LLVM_DEBUG(llvm::dbgs() << "source is don't touch\n";);
       source = LatticeValue::getOverdefined();
+    }
     if (valueEntry.mergeIn(source))
       changedLatticeValueWorklist.push(value);
+    LLVM_DEBUG(llvm::dbgs() << "[IMCP][MergeLattice]" << value << " becomes "
+                            << valueEntry << "\n";);
   }
   void mergeLatticeValue(FieldRef value, LatticeValue source) {
     // Don't even do a map lookup if from has no info in it.
@@ -480,8 +507,6 @@ void IMConstPropPass::markWireOrUnresetableRegOp(Operation *wireOrReg) {
   // handle, mark it as overdefined.
   // TODO: Eventually add a field-sensitive model.
   auto resultValue = wireOrReg->getResult(0);
-  if (!resultValue.getType().cast<FIRRTLType>().getPassiveType().isGround())
-    return markOverdefined(resultValue);
 
   foreachFIRRTLGroundType(
       resultValue.getType().cast<FIRRTLType>(),
