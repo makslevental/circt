@@ -573,23 +573,17 @@ void IMConstPropPass::visitConnect(ConnectOp connect, FieldRef changedValue) {
     return;
   }
 
-  auto srcFieldRef = getFieldRefFromValue(connect.src());
-  auto srcFieldID = srcFieldRef.getFieldID();
-  auto srcFieldRoot = srcFieldRef.getValue();
-  if (srcFieldRoot != changedValue.getValue())
+  auto offsetOpt = getRelativeFieldIDOffset(connect.src(), changedValue);
+
+  if (!offsetOpt)
     return;
 
-  auto maxFieldID = connect.src().getType().cast<FIRRTLType>().getMaxFieldID();
-  if (!(srcFieldID <= changedValue.getFieldID() &&
-        srcFieldID + maxFieldID >= changedValue.getFieldID()))
-    return;
-
-  auto relativeFieldID = changedValue.getFieldID() - srcFieldID;
+  auto relativeFieldID = *offsetOpt;
 
   auto destLeafType = destType.getFinalTypeByFieldID(relativeFieldID);
 
   // Handle implicit extensions.
-  auto srcValue = getExtendedLatticeValue(srcFieldRef, destLeafType);
+  auto srcValue = getExtendedLatticeValue(changedValue, destLeafType);
   if (srcValue.isUnknown())
     return;
   auto destFieldRef =
@@ -604,7 +598,7 @@ void IMConstPropPass::visitConnect(ConnectOp connect, FieldRef changedValue) {
       for (auto userOfResultPort : resultPortToInstanceResultMapping[blockArg])
         mergeLatticeValue({userOfResultPort, destFieldID}, srcValue);
     // Output ports are wire-like and may have users.
-    mergeLatticeValue({dest, destFieldID}, srcValue);
+    mergeLatticeValue(destFieldRef, srcValue);
     return;
   }
 
@@ -643,27 +637,36 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
-void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
-                                      FieldRef changedValue) {
-  auto src = regReset.resetValue();
-  auto srcFieldRef = getFieldRefFromValue(regReset.resetValue());
+static llvm::Optional<unsigned>
+getRelativeFieldIDOffset(Value src, FieldRef changedValue) {
+  auto srcFieldRef = getFieldRefFromValue(src);
   auto srcFieldID = srcFieldRef.getFieldID();
   auto srcFieldRoot = srcFieldRef.getValue();
   if (srcFieldRoot != changedValue.getValue())
-    return;
+    return {};
 
   auto maxFieldID = src.getType().cast<FIRRTLType>().getMaxFieldID();
   if (!(srcFieldID <= changedValue.getFieldID() &&
         srcFieldID + maxFieldID >= changedValue.getFieldID()))
+    return {};
+
+  return changedValue.getFieldID() - srcFieldID;
+}
+
+void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
+                                      FieldRef changedValue) {
+  auto offsetOpt =
+      getRelativeFieldIDOffset(regReset.resetValue(), changedValue);
+
+  if (!offsetOpt)
     return;
 
-  auto relativeFieldID = changedValue.getFieldID() - srcFieldID;
+  auto offset = *offsetOpt;
+  auto destLeafType = regReset.getType().getFinalTypeByFieldID(offset);
 
-  auto destLeafType = regReset.getType().getFinalTypeByFieldID(relativeFieldID);
-
-  auto srcValue = getExtendedLatticeValue(srcFieldRef, destLeafType,
+  auto srcValue = getExtendedLatticeValue(changedValue, destLeafType,
                                           /*allowTruncation=*/true);
-  mergeLatticeValue({regReset, relativeFieldID}, srcValue);
+  mergeLatticeValue({regReset, offset}, srcValue);
 }
 
 /// This method is invoked when an operand of the specified op changes its
