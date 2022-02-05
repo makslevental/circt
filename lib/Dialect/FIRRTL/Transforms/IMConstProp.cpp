@@ -40,6 +40,23 @@ static bool isRoot(Value value) {
     return true;
   return !isa<SubindexOp, SubfieldOp>(op);
 }
+
+static llvm::Optional<unsigned>
+getRelativeFieldIDOffset(Value src, FieldRef changedValue) {
+  auto srcFieldRef = getFieldRefFromValue(src);
+  auto srcFieldID = srcFieldRef.getFieldID();
+  auto srcFieldRoot = srcFieldRef.getValue();
+  if (srcFieldRoot != changedValue.getValue())
+    return {};
+
+  auto maxFieldID = src.getType().cast<FIRRTLType>().getMaxFieldID();
+  if (!(srcFieldID <= changedValue.getFieldID() &&
+        srcFieldID + maxFieldID >= changedValue.getFieldID()))
+    return {};
+
+  return changedValue.getFieldID() - srcFieldID;
+}
+
 /// This function recursively applies `fn` to leaf ground types of `type`.
 static void
 foreachFIRRTLGroundType(FIRRTLType type,
@@ -637,21 +654,7 @@ void IMConstPropPass::visitPartialConnect(PartialConnectOp partialConnect) {
   partialConnect.emitError("IMConstProp cannot handle partial connect");
 }
 
-static llvm::Optional<unsigned>
-getRelativeFieldIDOffset(Value src, FieldRef changedValue) {
-  auto srcFieldRef = getFieldRefFromValue(src);
-  auto srcFieldID = srcFieldRef.getFieldID();
-  auto srcFieldRoot = srcFieldRef.getValue();
-  if (srcFieldRoot != changedValue.getValue())
-    return {};
 
-  auto maxFieldID = src.getType().cast<FIRRTLType>().getMaxFieldID();
-  if (!(srcFieldID <= changedValue.getFieldID() &&
-        srcFieldID + maxFieldID >= changedValue.getFieldID()))
-    return {};
-
-  return changedValue.getFieldID() - srcFieldID;
-}
 
 void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
                                       FieldRef changedValue) {
