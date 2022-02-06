@@ -170,8 +170,10 @@ struct FIRRTLOpAsmDialectInterface : public OpAsmDialectInterface {
     // Many firrtl dialect operations have an optional 'name' attribute.  If
     // present, use it.
     if (op->getNumResults() == 1)
-      if (auto nameAttr = op->getAttrOfType<StringAttr>("name"))
+      if (auto nameAttr = op->getAttrOfType<StringAttr>("name")) {
         setNameFn(op->getResult(0), nameAttr.getValue());
+        return;
+      }
 
     // For constants in particular, propagate the value into the result name to
     // make it easier to read the IR.

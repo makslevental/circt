@@ -112,6 +112,11 @@ static Attribute getInt32Attr(MLIRContext *ctx, uint32_t value) {
 /// This can only handle nullary expressions, because we don't want to replicate
 /// subtrees arbitrarily.
 static bool isDuplicatableNullaryExpression(Operation *op) {
+  if (auto foo = dyn_cast<hw::ArrayGetOp>(op))
+    return foo.index().getDefiningOp<hw::ConstantOp>();
+  if (isa<comb::ExtractOp, hw::StructExtractOp>(op))
+    return true;
+
   // We don't want wires that are just constants aesthetically.
   if (isConstantExpression(op))
     return true;
@@ -481,7 +486,7 @@ static bool isOkToBitSelectFrom(Value v) {
   }
 
   // Aggregate access can be inlined.
-  if (v.getDefiningOp<StructExtractOp>())
+  if (v.getDefiningOp<StructExtractOp>() || v.getDefiningOp<ArrayGetOp>())
     return true;
 
   // Interface signal can be inlined.
@@ -506,7 +511,7 @@ static bool constructAccessPathToFieldID(SmallString<16> &path, Type type,
           unsigned size = path.size();
           for (auto elem : structTy.getElements()) {
             // FIXME: Rename invalid verilog field names.
-            path.append("f_");
+            path.append("_");
             path.append(elem.name);
             fieldID--;
             if (constructPath(elem.type))
@@ -2294,7 +2299,7 @@ static bool isExpressionEmittedInline(Operation *op) {
   // If this operation has multiple uses, we can't generally inline it.
   if (!op->getResult(0).hasOneUse()) {
     // ... unless it is nullary and duplicable, then we can emit it inline.
-    if (op->getNumOperands() != 0 || !isDuplicatableNullaryExpression(op))
+    if (!isDuplicatableNullaryExpression(op))
       return false;
   }
 

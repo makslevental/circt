@@ -112,6 +112,7 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
     // This flag tracks whether we can use the parent of source values as the
     // merged value.
     bool canUseSourceParent = true;
+    // bool areOperandsAllConstants = true;
 
     // The value which might be used as a merged value.
     Value sourceParent;
@@ -142,6 +143,8 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
       // erased at the top-level loop.
       if (idx != index)
         subConnections[idx].erase();
+      // areOperandsAllConstants &=
+      //     static_cast<bool>(src.getDefiningOp<ConstantOp>());
 
       // From here, check whether the value is derived from the same aggregate
       // value.
@@ -175,6 +178,9 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
       return sourceParent;
     }
 
+    // if (areOperandsAllCOnstants) {
+    // }
+
     // Otherwise, we concat all values and cast them into the aggregate type.
     Value accumulate;
     for (auto value : operands) {
@@ -184,14 +190,17 @@ bool MergeConnection::peelConnect(ConnectOp connect) {
                         *firrtl::getBitWidth(
                             value.getType().template cast<FIRRTLType>())),
           value);
+
       if (parentType.isa<FVectorType>())
         accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
                                        accumulate.getLoc(), value, accumulate)
                                  : value);
-      else
+      else {
+        // Bundle subfields are filled from MSB to LSB.
         accumulate = (accumulate ? builder->createOrFold<CatPrimOp>(
                                        accumulate.getLoc(), accumulate, value)
                                  : value);
+      }
     }
     return builder->createOrFold<BitCastOp>(accumulate.getLoc(), parentType,
                                             accumulate);

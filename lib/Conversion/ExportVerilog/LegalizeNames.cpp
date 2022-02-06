@@ -57,7 +57,7 @@ StringAttr FieldNameResolver::getRenamedFieldName(StringAttr fieldName) {
     return it->second;
 
   // Add a prefix "field_" as a Workaround to rename field names consitenly.
-  SmallString<16> newFieldName("f_");
+  SmallString<16> newFieldName("_");
   newFieldName +=  fieldName.getValue();
 
   auto newFieldNameAttr = StringAttr::get(fieldName.getContext(), newFieldName);

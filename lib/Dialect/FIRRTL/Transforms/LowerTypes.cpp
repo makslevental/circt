@@ -34,6 +34,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/APSInt.h"
@@ -336,6 +337,7 @@ private:
   /// Create a single memory from an aggregate type (instead of one per field)
   /// if this flag is enabled.
   bool flattenAggregateMemData;
+  Namespace name;
 
   /// Not to lower passive aggregate types as much as possible if this flag is
   /// enabled.
@@ -483,12 +485,6 @@ bool TypeLoweringVisitor::lowerProducer(
   // If this is not a bundle, there is nothing to do.
   auto srcType = op->getResult(0).getType().cast<FIRRTLType>();
   SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
-
-  if (!peelType(srcType, fieldTypes, false))
-    return false;
-
-  SmallVector<Value> lowered;
-  // Loop over the leaf aggregates.
   SmallString<16> loweredName;
   StringAttr innerSym = op->getAttrOfType<StringAttr>("inner_sym");
   if (auto nameAttr = op->getAttr("name"))
@@ -496,6 +492,17 @@ bool TypeLoweringVisitor::lowerProducer(
       loweredName = nameStrAttr.getValue();
   auto baseNameLen = loweredName.size();
   auto oldAnno = op->getAttr("annotations").dyn_cast_or_null<ArrayAttr>();
+
+  bool okToPreserve = preserveAggregate && isa<RegOp, WireOp>(op) &&
+                      (!oldAnno || oldAnno.empty()) &&
+                      (!innerSym || innerSym.getValue().empty());
+
+  if (!peelType(srcType, fieldTypes, false))
+    return false;
+
+  SmallVector<Value> lowered;
+  // Loop over the leaf aggregates.
+  unsigned int bar = 0;
 
   for (auto field : fieldTypes) {
     if (!loweredName.empty()) {
@@ -507,7 +514,8 @@ bool TypeLoweringVisitor::lowerProducer(
     if (innerSym)
       sName = StringAttr::get(context, innerSym.getValue() + "_" + loweredName);
     else
-      sName = StringAttr::get(context, loweredName);
+      sName = StringAttr::get(context, loweredName + std::to_string(bar++));
+    sName = StringAttr::get(context, name.newName(sName.getValue()));
 
     // For all annotations on the parent op, filter them based on the target
     // attribute.
