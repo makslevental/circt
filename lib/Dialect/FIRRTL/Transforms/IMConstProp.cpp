@@ -710,34 +710,26 @@ void IMConstPropPass::visitRegResetOp(RegResetOp regReset,
   assert(changedValue);
   LLVM_DEBUG(llvm::dbgs() << "[IMCP][Visit: RegResetOp] " << regReset
                           << " source: " << changedValue << "\n");
-  // auto offsetOpt =
-  //     getRelativeFieldIDOffset(regReset.resetValue(), regReset,
-  //     changedValue);
+  auto offsetOpt =
+      getRelativeFieldIDOffset(regReset.resetValue(), regReset, changedValue);
 
-  // if (!offsetOpt) {
-  //   LLVM_DEBUG(llvm::dbgs()
-  //              << "source: " << changedValue << " is not used in regReset
-  //              value"
-  //              << "\n");
-  //   return;
-  // }
+  if (!offsetOpt) {
+    LLVM_DEBUG(llvm::dbgs()
+               << "source: " << changedValue << " is not used in regReset"
+               << "\n");
+    return;
+  }
 
-  // auto offset = *offsetOpt;
-  // auto destLeafType = regReset.getType().getFinalTypeByFieldID(offset);
+  auto offset = *offsetOpt;
+  auto destLeafType = regReset.getType().getFinalTypeByFieldID(offset);
 
-  // auto srcValue = getExtendedLatticeValue(changedValue, destLeafType,
-  //                                       /*allowTruncation=*/true);
+  auto srcValue = getExtendedLatticeValue(changedValue, destLeafType,
+                                          /*allowTruncation=*/true);
 
-  // LLVM_DEBUG(llvm::dbgs() << "offest: " << offset << " "
-  //                         << "src lattice: " << srcValue << "\n";);
-  auto srcF = getFieldRefFromValue(regReset.resetValue());
-  foreachFIRRTLGroundType(
-      regReset.getType().cast<FIRRTLType>(),
-      [&](unsigned id, FIRRTLType destType) {
-        mergeLatticeValue({regReset, id}, getExtendedLatticeValue(
-                                              srcF.getSubField(id), destType,
-                                              /*allowTruncation=*/true));
-      });
+  LLVM_DEBUG(llvm::dbgs() << "offest: " << offset << " "
+                          << "src lattice: " << srcValue << "\n";);
+  mergeLatticeValue({regReset, offset},
+                    getExtendedLatticeValue(changedValue, destLeafType, true));
 }
 
 /// This method is invoked when an operand of the specified op changes its
@@ -843,8 +835,7 @@ void IMConstPropPass::visitOperation(Operation *op, FieldRef changedValue) {
     // We do not "merge" the lattice value in, we set it.  This is because the
     // fold functions can produce different values over time, e.g. in the
     // presence of InvalidValue operands that get resolved to other constants.
-    setLatticeValue(getFieldRefFromValue(op->getResult(i)),
-                    resultLattice);
+    setLatticeValue(getFieldRefFromValue(op->getResult(i)), resultLattice);
   }
 }
 
