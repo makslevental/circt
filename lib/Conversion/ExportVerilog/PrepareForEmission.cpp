@@ -222,6 +222,14 @@ static void lowerUsersToTemporaryWire(Operation &op) {
   auto builder = ImplicitLocOpBuilder::atBlockBegin(op.getLoc(), block);
 
   for (auto result : op.getResults()) {
+    if (result.getType().isa<InOutType>()) {
+      auto foo = &op;
+      while (!isa<hw::HWModuleOp>(foo->getParentOp())) {
+        foo = foo->getParentOp();
+      }
+      foo->getParentOp()->dump();
+      op.dump();
+    }
     auto newWire = builder.create<WireOp>(result.getType());
 
     while (!result.use_empty()) {

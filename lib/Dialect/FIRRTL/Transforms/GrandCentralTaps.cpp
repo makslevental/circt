@@ -749,7 +749,11 @@ void GrandCentralTapsPass::processAnnotation(AnnotatedPort &portAnno,
   auto targetAnno =
       targetAnnoIt != annos.end() ? targetAnnoIt->second : portAnno.anno;
 
-  wiring.targetFieldID = targetAnno.getFieldID();
+  auto di = targetAnno.getDict();
+
+  // assert(targetAnno.getFieldID() == 0);
+  // auto bar = di.get("id").dyn_cast_or_null<IntegerAttr>();
+  wiring.targetFieldID = targetAnno.getFieldID(); 
 
   // Handle data taps on signals and ports.
   if (targetAnno.isClass(referenceKeyClass)) {
