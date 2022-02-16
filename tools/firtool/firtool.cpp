@@ -466,7 +466,9 @@ processBuffer(MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
   bool nonConstAsyncResetValueIsError = false;
   if (imconstprop && !disableOptimization) {
     pm.nest<firrtl::CircuitOp>().addPass(firrtl::createIMConstPropPass());
-    nonConstAsyncResetValueIsError = true;
+    // With aggregate preservation, reset values will not be folded into
+    // constants.
+    nonConstAsyncResetValueIsError = !preserveAggregate;
   }
 
   // Read black box source files into the IR.
