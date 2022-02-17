@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Scheduling/Algorithms.h"
+#include "circt/Scheduling/Utilities.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
@@ -106,6 +107,34 @@ static void constructCyclicProblem(CyclicProblem &prob, FuncOp func) {
       Operation *to = ops[elemArr[1]];
       unsigned dist = elemArr[2];
       prob.setDistance(std::make_pair(from, to), dist);
+    }
+  }
+}
+
+static void constructSystolicProblem(SystolicProblem &prob, FuncOp func) {
+  // Parse systolic delay dependences in the testcase, in order to set the
+  // optional distance in the systolic problem.
+  if (auto attr = func->getAttrOfType<ArrayAttr>("systolicdeps")) {
+    auto &ops = prob.getOperations();
+    for (auto &elemArr : parseArrayOfArrays(attr)) {
+      if (elemArr.size() < 3)
+        continue; // skip this dependence, rather than setting the default value
+      Operation *from = ops[elemArr[0]];
+      Operation *to = ops[elemArr[1]];
+      unsigned dist = elemArr[2];
+      // See if there's already a dependence.
+      Problem::Dependence dep;
+      for (auto d : prob.getDependences(to))
+        if (d.getSource() == from)
+          dep = d;
+      // Insert an auxiliary dependence otherwise.
+      if (!dep.getDestination()) {
+        dep = std::make_pair(from, to);
+        auto res = prob.insertDependence(dep);
+        assert(succeeded(res));
+        (void)res;
+      }
+      prob.setSystolicDelay(dep, dist);
     }
   }
 }
@@ -225,6 +254,39 @@ void TestCyclicProblemPass::runOnOperation() {
     func->emitError("problem verification failed");
     return signalPassFailure();
   }
+}
+
+//===----------------------------------------------------------------------===//
+// SystolicProblem
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct TestSystolicProblemPass
+    : public PassWrapper<TestSystolicProblemPass, OperationPass<FuncOp>> {
+  void runOnOperation() override;
+  StringRef getArgument() const override { return "test-systolic-problem"; }
+  StringRef getDescription() const override {
+    return "Import a solution for the systolic problem encoded as attributes";
+  }
+};
+} // namespace
+
+void TestSystolicProblemPass::runOnOperation() {
+  auto func = getOperation();
+
+  auto prob = SystolicProblem::get(func);
+  constructProblem(prob, func);
+  constructCyclicProblem(prob, func);
+  constructSystolicProblem(prob, func);
+
+  if (failed(prob.check())) {
+    func->emitError("problem check failed");
+    return signalPassFailure();
+  }
+
+  dumpAsDOT(prob, "out.dot");
+
+  // TODO: SystolicProblem verification.
 }
 
 //===----------------------------------------------------------------------===//
@@ -453,6 +515,30 @@ void TestSimplexSchedulerPass::runOnOperation() {
     return;
   }
 
+  if (problemToTest == "SystolicProblem") {
+    auto prob = SystolicProblem::get(func);
+    constructProblem(prob, func);
+    constructCyclicProblem(prob, func);
+    constructSystolicProblem(prob, func);
+    assert(succeeded(prob.check()));
+    dumpAsDOT(prob, "out.dot");
+
+    if (failed(scheduleSimplex(prob, lastOp))) {
+      func->emitError("scheduling failed");
+      return signalPassFailure();
+    }
+
+    if (failed(prob.verify())) {
+      func->emitError("schedule verification failed");
+      return signalPassFailure();
+    }
+
+    func->setAttr("simplexInitiationInterval",
+                  builder.getI32IntegerAttr(*prob.getInitiationInterval()));
+    emitSchedule(prob, "simplexStartTime", builder);
+    return;
+  }
+
   if (problemToTest == "SharedOperatorsProblem") {
     auto prob = SharedOperatorsProblem::get(func);
     constructProblem(prob, func);
@@ -601,6 +687,9 @@ void registerSchedulingTestPasses() {
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestCyclicProblemPass>();
+  });
+  mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+    return std::make_unique<TestSystolicProblemPass>();
   });
   mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
     return std::make_unique<TestChainingProblemPass>();
