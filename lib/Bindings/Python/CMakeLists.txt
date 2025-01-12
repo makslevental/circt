@@ -56,6 +56,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
+  CIRCTCAPITransforms
 )
 
 if (CIRCT_INCLUDE_TESTS)
