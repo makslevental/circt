@@ -112,6 +112,13 @@ jobs:
           ccache -s
           # repairwheel wheelhouse/circt*whl -o wheelhouse
 
+      - name: "Save cache"
+        uses: actions/cache/save@v3
+        if: ${{ !cancelled() }}
+        with:
+          path: ${{ steps.setup_base.outputs.cache-dir }}
+          key: ${{ env.cache-key }}
+
       - name: Release current commit
         uses: ncipollo/release-action@v1.12.0
         with:
@@ -125,9 +132,18 @@ jobs:
           makeLatest: true
           omitBody: true
 
-      - name: "Save cache"
-        uses: actions/cache/save@v3
-        if: ${{ !cancelled() }}
+      - name: Release current commit
+        uses: ncipollo/release-action@v1.12.0
         with:
-          path: ${{ steps.setup_base.outputs.cache-dir }}
-          key: ${{ env.cache-key }}
+          owner: makslevental
+          repo: wheels
+          artifacts: "wheelhouse/circt*"
+          token: "${{ secrets.WHEELS_RELEASE }}"
+          tag: "i"
+          name: "i"
+          removeArtifacts: false
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
+          omitBody: true
+          artifactErrorsFailBuild: true

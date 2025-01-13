@@ -84,6 +84,7 @@ set(LLVM_DISTRIBUTION_COMPONENTS
     mlir-headers
     mlir-libraries
     mlir-python-sources
+    mlir-tblgen
 
     circt-cmake-exports
     circt-headers
