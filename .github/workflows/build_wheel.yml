@@ -1,0 +1,201 @@
+name: "Build CIRCT"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  # A PR number if a pull request and otherwise the commit hash. This cancels
+  # queued and in-progress runs for the same PR (presubmit) or commit
+  # (postsubmit). The workflow name is prepended to avoid conflicts between
+  # different workflows.
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: ["ubuntu-22.04", "macos-14", "macos-13"]
+        python-version: ["3.10", "3.11", "3.12"]
+        include: [
+          # {runs-on: "ubuntu-22.04", name: "manylinux_x86_64", os: "almalinux", arch: x86_64, container: "quay.io/pypa/manylinux_2_28_x86_64"},
+          {runs-on: "ubuntu-22.04", name: "ubuntu_x86_64", os: "ubuntu", arch: x86_64},
+          {runs-on: "macos-14", name: "macos_arm64", os: "macos", arch: arm64},
+          {runs-on: "macos-13", name: "macos_x86_64", os: "macos", arch: x86_64},
+        ]
+
+    runs-on: ${{ matrix.runs-on }}
+
+    name: "${{ matrix.name }} ${{ matrix.python-version }}"
+
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      id-token: write
+      contents: write
+
+    env:
+      # either the PR number or `branch-N` where N always increments
+      cache-key: "circt_${{ matrix.name }}_${{ matrix.python-version }}_${{ format('{0}-{1}', github.ref_name, github.run_number) }}"
+
+    container:
+      image: ${{ matrix.container }}
+
+    steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4.2.2
+        with:
+          submodules: true
+
+      - name: "Setup base"
+        uses: ./.github/actions/setup_base
+        id: setup_base
+        with:
+          cache-key: ${{ env.cache-key }}
+          restore-key: "circt_${{ matrix.name }}_${{ matrix.python-version }}_"
+          os: ${{ matrix.os }}
+          arch: ${{ matrix.arch }}
+          python-version: ${{ matrix.python-version }}
+
+      - if: ${{ matrix.os == 'almalinux' }}
+        run: |
+          git config --global --add safe.directory /__w/circt/circt
+
+      - name: "Build"
+        run: |
+          
+          set -x
+          
+          export CIRCT_SRC_DIR="$PWD"
+          export LLVM_SOURCE_DIR="$CIRCT_SRC_DIR/llvm"
+          export CIRCT_BUILD_DIR="$PWD/circt-build"
+          export CIRCT_INSTALL_DIR="$PWD/circt-install/circt-install"
+          
+          $python3_command -m pip install setuptools wheel
+          $python3_command -m pip install -r "$LLVM_SOURCE_DIR/mlir/python/requirements.txt"
+          
+          ccache -z
+          
+          cmake_options=(
+            -S "$LLVM_SOURCE_DIR/llvm"
+            -B "$CIRCT_BUILD_DIR"
+            
+            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_INSTALL_PREFIX="$CIRCT_INSTALL_DIR" 
+           
+            -DCMAKE_C_VISIBILITY_PRESET=hidden 
+            -DCMAKE_CXX_VISIBILITY_PRESET=hidden 
+            -DCMAKE_VISIBILITY_INLINES_HIDDEN=ON 
+            -DPython3_EXECUTABLE="$(which $python3_command)"
+            # on AddLLVM.cmake has `PRE_BUILD` in it 
+            -DCMAKE_POLICY_DEFAULT_CMP0175=OLD
+            -DCMAKE_BUILD_TYPE=Debug
+          
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
+            -DLLVM_BUILD_EXAMPLES=OFF
+            -DLLVM_BUILD_LLVM_DYLIB=OFF
+            -DLLVM_BUILD_TOOLS=ON
+            -DLLVM_CCACHE_BUILD=ON
+            -DLLVM_ENABLE_ASSERTIONS=ON
+            -DLLVM_ENABLE_BINDINGS=OFF
+            -DLLVM_ENABLE_OCAMLDOC=OFF
+            -DLLVM_ENABLE_PROJECTS=mlir
+            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$CIRCT_SRC_DIR
+            -DLLVM_EXTERNAL_PROJECTS=circt
+            -DLLVM_INCLUDE_TOOLS=ON
+            -DLLVM_LINK_LLVM_DYLIB=OFF
+            -DLLVM_OPTIMIZED_TABLEGEN=ON
+            -DLLVM_USE_SPLIT_DWARF=ON
+            -DMLIR_ENABLE_BINDINGS_PYTHON=ON
+          )
+          
+          if [[ "${{ matrix.os }}" == "ubuntu" ]] || [[ "${{ matrix.os }}" == "almalinux" ]]; then
+              cmake_options+=(
+                -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
+                -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
+                -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
+              )
+          fi
+          
+          # don't build a fat binary
+          if [[ "${{ matrix.os }}" == "macos" ]]; then
+              cmake_options+=(
+                -DCMAKE_MODULE_LINKER_FLAGS="-Wl,-U -Wl,_PyClassMethod_New"
+                -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} 
+              )
+          fi
+          
+          cmake "${cmake_options[@]}"
+          cmake --build "$CIRCT_BUILD_DIR" --target install
+          
+          ccache -s
+          
+          # prevent universal wheels from being built for macos
+          if [[ "${{ matrix.os }}" == "macos" ]]; then
+            _PYTHON_HOST_PLATFORM=$($python3_command -c "import sysconfig; print(sysconfig.get_platform())")
+            export _PYTHON_HOST_PLATFORM=$(echo $_PYTHON_HOST_PLATFORM | sed 's/universal2/${{ matrix.arch }}/g')
+          fi
+          
+          $python3_command -m pip wheel "$CIRCT_SRC_DIR/lib/Bindings/Python" -w "$CIRCT_SRC_DIR/wheelhouse"
+          
+          pushd $LLVM_SOURCE_DIR && LLVM_SHA_SHORT=$(git rev-parse --short HEAD) && popd
+          tar -czf circt_${{ matrix.name }}_$(date +'%Y%m%d')_$LLVM_SHA_SHORT.tar.gz -C "$CIRCT_INSTALL_DIR/.." circt-install
+          rm -rf "$CIRCT_BUILD_DIR" "$LLVM_SOURCE_DIR"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: circt_${{ matrix.name }}_${{ matrix.python-version }}_artifact
+          path: circt-install
+          if-no-files-found: warn
+
+      - name: Release current commit
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: "wheelhouse/circt*"
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          tag: "latest"
+          name: "latest"
+          removeArtifacts: false
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
+          omitBody: true
+
+#      - name: Release current commit
+#        uses: ncipollo/release-action@v1.12.0
+#        with:
+#          owner: makslevental
+#          repo: wheels
+#          artifacts: "wheelhouse/circt*.whl"
+#          token: "${{ secrets.WHEELS_RELEASE }}"
+#          tag: "i"
+#          name: "i"
+#          removeArtifacts: false
+#          allowUpdates: true
+#          replacesArtifacts: true
+#          makeLatest: true
+#          omitBody: true
+#          artifactErrorsFailBuild: true
+
+      - name: "Save cache"
+        uses: actions/cache/save@v3
+        if: ${{ !cancelled() }}
+        with:
+          path: ${{ steps.setup_base.outputs.cache-dir }}
+          key: ${{ env.cache-key }}
+
+      - name: "Setup tmate session"
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3.18
+        with:
+          limit-access-to-actor: true
+          connect-timeout-seconds: 60
+          install-dependencies: ${{ startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'windows') || startsWith(matrix.os, 'ubuntu') }}
