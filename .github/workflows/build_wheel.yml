@@ -15,19 +15,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+
+  build-distro:
 
     strategy:
       fail-fast: false
       matrix:
-        runs-on: ["ubuntu-22.04", "macos-14", "macos-13"]
-        python-version: ["3.10", "3.11", "3.12"]
-        include: [
-          # {runs-on: "ubuntu-22.04", name: "manylinux_x86_64", os: "almalinux", arch: x86_64, container: "quay.io/pypa/manylinux_2_28_x86_64"},
-          {runs-on: "ubuntu-22.04", name: "ubuntu_x86_64", os: "ubuntu", arch: x86_64},
-          {runs-on: "macos-14", name: "macos_arm64", os: "macos", arch: arm64},
-          {runs-on: "macos-13", name: "macos_x86_64", os: "macos", arch: x86_64},
-        ]
+        include:
+          - name: "manylinux_x86_64"
+            runs-on: "ubuntu-22.04"
+            container: "quay.io/pypa/manylinux_2_28_x86_64"
+            os: "almalinux"
+            arch: x86_64
+          - name: "ubuntu_x86_64"
+            runs-on: "ubuntu-22.04"
+            os: "ubuntu"
+            arch: x86_64
+          - name: "windows_x86_64"
+            runs-on: "windows-2019"
+            os: "windows"
+            arch: x86_64
+          - name: "macos_arm64"
+            runs-on: "macos-14"
+            os: "macos"
+            arch: arm64
+          - name: "macos_x86_64"
+            runs-on: "macos-13"
+            os: "macos"
+            arch: x86_64
 
     runs-on: ${{ matrix.runs-on }}
 
@@ -62,7 +77,6 @@ jobs:
           restore-key: "circt_${{ matrix.name }}_${{ matrix.python-version }}_"
           os: ${{ matrix.os }}
           arch: ${{ matrix.arch }}
-          python-version: ${{ matrix.python-version }}
 
       - if: ${{ matrix.os == 'almalinux' }}
         run: |
@@ -74,96 +88,31 @@ jobs:
         with:
           version: 4.13.4
 
-      - name: "Build"
+      - name: "Build distro wheel"
         run: |
           
           set -x
           
-          export CIRCT_SRC_DIR="$PWD"
-          export LLVM_SOURCE_DIR="$CIRCT_SRC_DIR/llvm"
-          export CIRCT_BUILD_DIR="$PWD/circt-build"
-          export CIRCT_INSTALL_DIR="$PWD/circt-install/circt-install"
+          $python3_command -m pip install setuptools wheel repairwheel
           
-          $python3_command -m pip install setuptools wheel
-          $python3_command -m pip install -r "$LLVM_SOURCE_DIR/mlir/python/requirements.txt"
-          
-          ccache -z
-          
-          cmake_options=(
-            -S "$LLVM_SOURCE_DIR/llvm"
-            -B "$CIRCT_BUILD_DIR"
-            
-            -DCMAKE_BUILD_TYPE=Release
-            -DCMAKE_INSTALL_PREFIX="$CIRCT_INSTALL_DIR" 
-           
-            -DPython3_EXECUTABLE="$(which $python3_command)"
-            # on AddLLVM.cmake has `PRE_BUILD` in it 
-            -DCMAKE_POLICY_DEFAULT_CMP0175=OLD
-          
-            -DLLVM_BUILD_EXAMPLES=OFF
-            -DLLVM_BUILD_LLVM_DYLIB=OFF
-            -DLLVM_BUILD_TOOLS=ON
-            -DLLVM_CCACHE_BUILD=ON
-            -DLLVM_ENABLE_ASSERTIONS=ON
-            -DLLVM_ENABLE_BINDINGS=OFF
-            -DLLVM_ENABLE_OCAMLDOC=OFF
-            -DLLVM_ENABLE_PROJECTS=mlir
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$CIRCT_SRC_DIR
-            -DLLVM_EXTERNAL_PROJECTS=circt
-            -DLLVM_INCLUDE_TOOLS=ON
-            -DLLVM_LINK_LLVM_DYLIB=OFF
-            -DLLVM_OPTIMIZED_TABLEGEN=ON
-            -DLLVM_TARGETS_TO_BUILD="host;AMDGPU;NVPTX"
-            -DLLVM_USE_SPLIT_DWARF=ON
-          
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
-            -DMLIR_ENABLE_BINDINGS_PYTHON=ON
-            -DMLIR_ENABLE_ROCM_CONVERSIONS=ON
-            # disable so that we don't depend on rocm/cuda
-            -DMLIR_ENABLE_EXECUTION_ENGINE=OFF
-            -DMLIR_ENABLE_ROCM_RUNNER=OFF
-            # otherwise rocm will be queried
-            -DROCM_TEST_CHIPSET=gfx1100
-          )
-          
-          if [[ "${{ matrix.os }}" == "ubuntu" ]] || [[ "${{ matrix.os }}" == "almalinux" ]]; then
-              cmake_options+=(
-                -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
-                -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
-                -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
-              )
-          fi
+          export LLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
           
           # don't build a fat binary
           if [[ "${{ matrix.os }}" == "macos" ]]; then
-              cmake_options+=(
-                -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} 
-              )
-          fi
-          
-          cmake "${cmake_options[@]}"
-          cmake --build "$CIRCT_BUILD_DIR" --target install
-          
-          ccache -s
-          
-          # prevent universal wheels from being built for macos
-          if [[ "${{ matrix.os }}" == "macos" ]]; then
+            export CMAKE_OSX_ARCHITECTURES="${{ matrix.arch }}"
+            # prevent universal wheels from being built for macos
             _PYTHON_HOST_PLATFORM=$($python3_command -c "import sysconfig; print(sysconfig.get_platform())")
             export _PYTHON_HOST_PLATFORM=$(echo $_PYTHON_HOST_PLATFORM | sed 's/universal2/${{ matrix.arch }}/g')
           fi
           
-          $python3_command -m pip wheel "$CIRCT_SRC_DIR/lib/Bindings/Python" -w "$CIRCT_SRC_DIR/wheelhouse"
+          CIRCT_SHA_SHORT=$(git rev-parse --short HEAD)
+          DATETIME=$(date +"%Y%m%d%H")
+          sed -i.bak "s/123456654321/$DATETIME+$CIRCT_SHA_SHORT/g" $PWD/pyproject.toml
           
-          pushd $LLVM_SOURCE_DIR && LLVM_SHA_SHORT=$(git rev-parse --short HEAD) && popd
-          tar -czf circt_${{ matrix.name }}_$(date +'%Y%m%d')_$LLVM_SHA_SHORT.tar.gz -C "$CIRCT_INSTALL_DIR/.." circt-install
-          rm -rf "$CIRCT_BUILD_DIR" "$LLVM_SOURCE_DIR"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: circt_${{ matrix.name }}_${{ matrix.python-version }}_artifact
-          path: circt-install
-          if-no-files-found: warn
+          ccache -z
+          $python3_command -m pip wheel $PWD -w wheelhouse -v
+          ccache -s
+          # repairwheel wheelhouse/circt*whl -o wheelhouse
 
       - name: Release current commit
         uses: ncipollo/release-action@v1.12.0
@@ -178,33 +127,9 @@ jobs:
           makeLatest: true
           omitBody: true
 
-#      - name: Release current commit
-#        uses: ncipollo/release-action@v1.12.0
-#        with:
-#          owner: makslevental
-#          repo: wheels
-#          artifacts: "wheelhouse/circt*.whl"
-#          token: "${{ secrets.WHEELS_RELEASE }}"
-#          tag: "i"
-#          name: "i"
-#          removeArtifacts: false
-#          allowUpdates: true
-#          replacesArtifacts: true
-#          makeLatest: true
-#          omitBody: true
-#          artifactErrorsFailBuild: true
-
       - name: "Save cache"
         uses: actions/cache/save@v3
         if: ${{ !cancelled() }}
         with:
           path: ${{ steps.setup_base.outputs.cache-dir }}
           key: ${{ env.cache-key }}
-
-#      - name: "Setup tmate session"
-#        if: ${{ failure() }}
-#        uses: mxschmitt/action-tmate@v3.18
-#        with:
-#          limit-access-to-actor: true
-#          connect-timeout-seconds: 60
-#          install-dependencies: ${{ startsWith(matrix.os, 'macos') || startsWith(matrix.os, 'windows') || startsWith(matrix.os, 'ubuntu') }}
