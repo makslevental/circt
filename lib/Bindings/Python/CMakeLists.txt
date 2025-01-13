@@ -24,6 +24,9 @@ set(PYTHON_BINDINGS_SOURCES
   SeqModule.cpp
   SupportModule.cpp
   SVModule.cpp
+  # Headers must be included explicitly so they are installed.
+  CIRCTModules.h
+  PybindUtils.h
 )
 
 set(PYTHON_BINDINGS_LINK_LIBS
@@ -49,7 +52,6 @@ set(PYTHON_BINDINGS_LINK_LIBS
   CIRCTCAPISV
   CIRCTCAPIVerif
   MLIRCAPITransforms
-  CIRCTCAPITransforms
 )
 
 if (CIRCT_INCLUDE_TESTS)
@@ -241,8 +243,7 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
-    MLIRPythonSources
-    MLIRPythonExtension.RegisterEverything
+    MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
 )
 
@@ -251,8 +252,7 @@ add_mlir_python_modules(CIRCTPythonModules
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt"
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
-    MLIRPythonSources
-    MLIRPythonExtension.RegisterEverything
+    MLIRPythonSources.Core
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
