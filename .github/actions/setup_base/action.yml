@@ -98,7 +98,7 @@ runs:
       uses: aminya/setup-cpp@v1
       if: ${{ startsWith(inputs.os, 'almalinux') || startsWith(inputs.os, 'ubuntu') || startsWith(inputs.os, 'windows') }}
       with:
-        compiler: ${{ startsWith(inputs.os, 'almalinux') && 'gcc' || 'llvm-18' }}
+        compiler: llvm-18
         cmake: true
         ninja: true
         ccache: ${{ startsWith(inputs.os, 'windows') || startsWith(inputs.os, 'ubuntu') }}
@@ -108,8 +108,8 @@ runs:
       shell: bash
       run: |
         if [[ "${{ inputs.os }}" == "almalinux" ]]; then
-          echo "CC=/opt/rh/gcc-toolset-14/root/usr/bin/gcc" >> $GITHUB_ENV
-          echo "CXX=/opt/rh/gcc-toolset-14/root/usr/bin/g++" >> $GITHUB_ENV
+          echo "CC=/github/home/llvm/bin/clang" >> $GITHUB_ENV
+          echo "CXX=/github/home/llvm/bin/clang++" >> $GITHUB_ENV
         elif [[ "${{ inputs.os }}" == "ubuntu" ]]; then
           echo "CC=/usr/lib/llvm-18/bin/clang" >> $GITHUB_ENV
           echo "CXX=/usr/lib/llvm-18/bin/clang++" >> $GITHUB_ENV
@@ -124,14 +124,19 @@ runs:
     - name: "Python deps"
       shell: bash
       run: |
-        python3_command=""
-        if (command -v python${{ inputs.python-version }} &> /dev/null); then
-          python3_command="python${{ inputs.python-version }}"
-        elif (command -v python3 &> /dev/null); then
-          python3_command="python3"
-        elif (command -v python &> /dev/null); then
-          python3_command="python"
-        fi 
+        if [[ "${{ inputs.os }}" == "almalinux" ]]; then
+          _python_ver="cp$(echo ${{ inputs.python-version }} | sed 's/\.//g')"
+          python3_command=/opt/python/${_python_ver}-${_python_ver}/bin/python3
+        else
+          python3_command=""
+          if (command -v python${{ inputs.python-version }} &> /dev/null); then
+            python3_command="python${{ inputs.python-version }}"
+          elif (command -v python3 &> /dev/null); then
+            python3_command="python3"
+          elif (command -v python &> /dev/null); then
+            python3_command="python"
+          fi 
+        fi
         echo "python3_command=$python3_command" >> $GITHUB_ENV
 
     - name: "Set CMake/ccache env vars"
