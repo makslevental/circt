@@ -35,66 +35,8 @@ build-dir = "build"
 # gives you a wheel tagged py3-none
 wheel.py-api = "py3"
 cmake.source-dir = "llvm/llvm"
-
-[tool.scikit-build.cmake.define]
-CMAKE_POLICY_DEFAULT_CMP0175 = "OLD"
-CMAKE_BUILD_TYPE = "Release"
-CMAKE_CXX_COMPILER_LAUNCHER = { env = "CMAKE_CXX_COMPILER_LAUNCHER", default = "" }
-CMAKE_C_COMPILER_LAUNCHER = { env = "CMAKE_C_COMPILER_LAUNCHER", default = "" }
-CMAKE_GENERATOR = "Ninja"
-CMAKE_OSX_ARCHITECTURES = { env = "CMAKE_OSX_ARCHITECTURES", default = "" }
-CMAKE_VERBOSE_MAKEFILE = "ON"
-# mlir/llvm
-LLVM_ENABLE_PROJECTS = "mlir;llvm"
-LLVM_EXTERNAL_CIRCT_SOURCE_DIR = { env = "LLVM_EXTERNAL_CIRCT_SOURCE_DIR", default = "" }
-LLVM_EXTERNAL_PROJECTS = "circt"
-# custom distro
-LLVM_INSTALL_TOOLCHAIN_ONLY = "OFF"
-# this is always lowercase
-LLVM_DISTRIBUTION_COMPONENTS = "cmake-exports;;llvm-headers;llvm-libraries;MLIRPythonModules;mlir-cmake-exports;mlir-headers;mlir-libraries;circt-cmake-exports;circt-headers;circt-libraries;CIRCTPythonModules;FileCheck;not"
-# note you need this to build llvm-strip for stripped targets.........
-LLVM_INCLUDE_TOOLS = "ON"
-# on
-CIRCT_BINDINGS_PYTHON_ENABLED = "ON"
-LLVM_BUILD_UTILS = "ON"
-LLVM_CCACHE_BUILD = "ON"
-LLVM_ENABLE_ASSERTIONS = "ON"
-LLVM_ENABLE_RTTI = "ON"
-LLVM_ENABLE_WARNINGS = "ON"
-LLVM_FORCE_ENABLE_STATS = "ON"
-LLVM_INSTALL_UTILS = "ON"
-LLVM_USE_SPLIT_DWARF = "ON"
-MLIR_ENABLE_BINDINGS_PYTHON = "ON"
-MLIR_ENABLE_ROCM_CONVERSIONS = "ON"
-LLVM_TARGETS_TO_BUILD = "host;AMDGPU;NVPTX"
-# off
-CIRCT_INCLUDE_TESTS = "OFF"
-LLVM_BUILD_BENCHMARKS = "OFF"
-LLVM_BUILD_DOCS = "OFF"
-LLVM_BUILD_EXAMPLES = "OFF"
-LLVM_BUILD_LLVM_DYLIB = "OFF"
-LLVM_ENABLE_BINDINGS = "OFF"
-LLVM_ENABLE_CRASH_OVERRIDES = "OFF"
-LLVM_ENABLE_LIBCXX = "OFF"
-LLVM_ENABLE_LIBEDIT = "OFF"
-LLVM_ENABLE_LIBXML2 = "OFF"
-LLVM_ENABLE_OCAMLDOC = "OFF"
-LLVM_ENABLE_TERMINFO = "OFF"
-LLVM_ENABLE_Z3_SOLVER = "OFF"
-LLVM_ENABLE_ZLIB = "OFF"
-LLVM_ENABLE_ZSTD = "OFF"
-LLVM_INCLUDE_BENCHMARKS = "OFF"
-LLVM_INCLUDE_DOCS = "OFF"
-LLVM_INCLUDE_EXAMPLES = "OFF"
-LLVM_INCLUDE_GO_TESTS = "OFF"
-LLVM_INCLUDE_TESTS = "OFF"
-LLVM_LINK_LLVM_DYLIB = "OFF"
-# disable so that we don't depend on rocm/cuda
-MLIR_ENABLE_EXECUTION_ENGINE = "OFF"
-MLIR_ENABLE_ROCM_RUNNER = "OFF"
-
-[tool.scikit-build.build]
-targets = ["install-distribution"]
+cmake.args = ["-C",  "llvm_cache.cmake"]
+cmake.define = { CMAKE_BUILD_TYPE = "Release", CMAKE_GENERATOR = "Ninja"}
+build.targets = ["install-distribution"]
 # this is actually a no-op but that's okay because the build target performs the install
-[tool.scikit-build.install]
-components = ["install-distribution"]
+install.components = ["install-distribution"]
