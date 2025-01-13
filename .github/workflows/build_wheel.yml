@@ -95,8 +95,6 @@ jobs:
           
           $python3_command -m pip install setuptools wheel repairwheel
           
-          export LLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD
-          
           # don't build a fat binary
           if [[ "${{ matrix.os }}" == "macos" ]]; then
             export CMAKE_OSX_ARCHITECTURES="${{ matrix.arch }}"
