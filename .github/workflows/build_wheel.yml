@@ -93,12 +93,13 @@ jobs:
             -DCMAKE_C_VISIBILITY_PRESET=hidden 
             -DCMAKE_CXX_VISIBILITY_PRESET=hidden 
             -DCMAKE_VISIBILITY_INLINES_HIDDEN=ON 
+            -DCMAKE_EXE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
+            -DCMAKE_SHARED_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
+            -DCMAKE_MODULE_LINKER_FLAGS_INIT="-fuse-ld=lld-18"
             -DPython3_EXECUTABLE="$(which $python3_command)"
             # on AddLLVM.cmake has `PRE_BUILD` in it 
             -DCMAKE_POLICY_DEFAULT_CMP0175=OLD
-            -DCMAKE_BUILD_TYPE=Debug
           
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
             -DLLVM_BUILD_EXAMPLES=OFF
             -DLLVM_BUILD_LLVM_DYLIB=OFF
             -DLLVM_BUILD_TOOLS=ON
@@ -112,8 +113,16 @@ jobs:
             -DLLVM_INCLUDE_TOOLS=ON
             -DLLVM_LINK_LLVM_DYLIB=OFF
             -DLLVM_OPTIMIZED_TABLEGEN=ON
+            -DLLVM_TARGETS_TO_BUILD="host;AMDGPU;NVPTX"
             -DLLVM_USE_SPLIT_DWARF=ON
+          
+            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON
             -DMLIR_ENABLE_BINDINGS_PYTHON=ON
+            # disable so that we don't depend on rocm/cuda
+            -DMLIR_ENABLE_EXECUTION_ENGINE=OFF
+            -DMLIR_ENABLE_ROCM_CONVERSIONS=ON
+            -DMLIR_ENABLE_ROCM_RUNNER=ON
+            -DROCM_TEST_CHIPSET=gfx1100
           )
           
           if [[ "${{ matrix.os }}" == "ubuntu" ]] || [[ "${{ matrix.os }}" == "almalinux" ]]; then
