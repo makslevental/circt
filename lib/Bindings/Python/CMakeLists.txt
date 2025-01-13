@@ -264,7 +264,8 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
-    MLIRPythonSources.Core
+    MLIRPythonSources
+    MLIRPythonExtension.RegisterEverything
     CIRCTBindingsPythonExtension
 )
 
@@ -273,7 +274,8 @@ add_mlir_python_modules(CIRCTPythonModules
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt"
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
-    MLIRPythonSources.Core
+    MLIRPythonSources
+    MLIRPythonExtension.RegisterEverything
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
