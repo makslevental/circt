@@ -11,7 +11,7 @@ set(CMAKE_CXX_COMPILER_LAUNCHER "$ENV{CMAKE_CXX_COMPILER_LAUNCHER}" CACHE STRING
 set(CMAKE_OSX_ARCHITECTURES "$ENV{CMAKE_OSX_ARCHITECTURES}" CACHE STRING "")
 set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "")
 
-set(LLVM_ENABLE_PROJECTS "llvm;mlir" CACHE STRING "")
+set(LLVM_ENABLE_PROJECTS "llvm;mlir;lld" CACHE STRING "")
 set(LLVM_EXTERNAL_PROJECTS "circt" CACHE STRING "")
 set(LLVM_EXTERNAL_CIRCT_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE STRING "")
 
@@ -90,6 +90,10 @@ set(LLVM_DISTRIBUTION_COMPONENTS
     circt-headers
     circt-libraries
     CIRCTPythonModules
+
+    lld-cmake-exports
+    lld-headers
+    lld-libraries
     CACHE STRING "")
 
 get_cmake_property(_variableNames VARIABLES)
