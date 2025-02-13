@@ -31,12 +31,17 @@ build-backend = "scikit_build_core.build"
 
 [tool.scikit-build]
 minimum-version = "0.10"
-build-dir = "build"
+build-dir = "build_pip"
 # gives you a wheel tagged py3-none
 wheel.py-api = "py3"
 cmake.source-dir = "llvm/llvm"
 cmake.args = ["-C",  "llvm_cache.cmake"]
-cmake.define = { CMAKE_BUILD_TYPE = "Release", CMAKE_GENERATOR = "Ninja"}
 build.targets = ["install-distribution"]
 # this is actually a no-op but that's okay because the build target performs the install
 install.components = ["install-distribution"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_C_COMPILER_LAUNCHER = { env = "CMAKE_C_COMPILER_LAUNCHER", default = "" }
+CMAKE_CXX_COMPILER_LAUNCHER = { env = "CMAKE_CXX_COMPILER_LAUNCHER", default = "" }
+CMAKE_VISIBILITY_INLINES_HIDDEN = "OFF"
+CMAKE_VERBOSE_MAKEFILE = "ON"
