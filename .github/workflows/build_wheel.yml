@@ -92,9 +92,7 @@ jobs:
         run: |
           
           set -x
-          
-          git apply --ignore-space-change --ignore-whitespace --directory llvm lld_patch.diff
-          
+                    
           $python3_command -m venv venv && source venv/bin/activate
           pip install setuptools wheel repairwheel
           
