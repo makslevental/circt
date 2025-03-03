@@ -152,15 +152,6 @@ declare_mlir_dialect_python_bindings(
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
-  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
-  TD_FILE dialects/IndexOps.td
-  SOURCES
-    dialects/index.py
-  DIALECT_NAME index
-  GEN_ENUM_BINDINGS)
-
-declare_mlir_dialect_python_bindings(
-  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
   TD_FILE dialects/MSFTOps.td
   SOURCES
