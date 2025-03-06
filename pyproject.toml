@@ -1,0 +1,47 @@
+# Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+# Copyright (c) 2024.
+
+[project]
+name = "circt"
+version = "123456654321"
+requires-python = ">=3.9"
+dependencies = [
+    "numpy>=1.19.5,<=2.1.2",
+    "ml_dtypes>=0.1.0,<=0.5.0",
+    # circt
+    "z3-solver==4.13.4",
+]
+[project.urls]
+Homepage = "https://github.com/llvm/circt"
+
+[build-system]
+requires = [
+    "scikit-build-core==0.10.7",
+    "nanobind==2.4.0",
+    # MLIR build depends.
+    "numpy>=1.19.5,<=2.1.2",
+    "pybind11>=2.11,<=2.12",
+    "nanobind==2.4.0",
+    "PyYAML>=5.4.0,<=6.0.1",
+    "ml_dtypes>=0.1.0,<=0.5.0",
+]
+build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+minimum-version = "0.10"
+build-dir = "build_pip"
+# gives you a wheel tagged py3-none
+wheel.py-api = "py3"
+cmake.source-dir = "llvm/llvm"
+cmake.args = ["-C",  "llvm_cache.cmake"]
+build.targets = ["install-distribution"]
+# this is actually a no-op but that's okay because the build target performs the install
+install.components = ["install-distribution"]
+
+[tool.scikit-build.cmake.define]
+CMAKE_C_COMPILER_LAUNCHER = { env = "CMAKE_C_COMPILER_LAUNCHER", default = "" }
+CMAKE_CXX_COMPILER_LAUNCHER = { env = "CMAKE_CXX_COMPILER_LAUNCHER", default = "" }
+CMAKE_VISIBILITY_INLINES_HIDDEN = "OFF"
+CMAKE_VERBOSE_MAKEFILE = "ON"
