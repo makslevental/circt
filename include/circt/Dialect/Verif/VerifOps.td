@@ -443,9 +443,7 @@ def SimulationOp : VerifOp<"simulation", [
   let hasRegionVerifier = true;
 }
 
-def SymbolicValueOp : VerifOp<"symbolic_value", [
-  ParentOneOf<["verif::FormalOp", "hw::HWModuleOp"]>,
-]>{
+def SymbolicValueOp : VerifOp<"symbolic_value">{
   let summary = "Create a symbolic value for formal verification";
   let description = [{
     This operation creates a new symbolic value that can be used to formally
