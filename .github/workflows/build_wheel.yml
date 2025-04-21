@@ -1,0 +1,156 @@
+name: "Build CIRCT"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  # A PR number if a pull request and otherwise the commit hash. This cancels
+  # queued and in-progress runs for the same PR (presubmit) or commit
+  # (postsubmit). The workflow name is prepended to avoid conflicts between
+  # different workflows.
+  group: ${{ github.workflow }}-${{ github.event.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+
+  build-distro:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "manylinux_x86_64"
+            runs-on: "ubuntu-22.04"
+            container: "quay.io/pypa/manylinux_2_28_x86_64"
+            os: "almalinux"
+            arch: x86_64
+#          - name: "ubuntu_x86_64"
+#            runs-on: "ubuntu-22.04"
+#            os: "ubuntu"
+#            arch: x86_64
+          - name: "windows_x86_64"
+            runs-on: "windows-2019"
+            os: "windows"
+            arch: x86_64
+          - name: "macos_arm64"
+            runs-on: "macos-14"
+            os: "macos"
+            arch: arm64
+          - name: "macos_x86_64"
+            runs-on: "macos-13"
+            os: "macos"
+            arch: x86_64
+
+    runs-on: ${{ matrix.runs-on }}
+
+    name: "${{ matrix.name }} ${{ matrix.python-version }}"
+
+    defaults:
+      run:
+        shell: bash
+
+    permissions:
+      id-token: write
+      contents: write
+
+    env:
+      # either the PR number or `branch-N` where N always increments
+      cache-key: "circt_${{ matrix.name }}_${{ matrix.python-version }}_${{ format('{0}-{1}', github.ref_name, github.run_number) }}"
+
+    container:
+      image: ${{ matrix.container }}
+
+    steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4.2.2
+        with:
+          submodules: true
+
+      - name: "Setup base"
+        uses: ./.github/actions/setup_base
+        id: setup_base
+        with:
+          cache-key: ${{ env.cache-key }}
+          restore-key: "circt_${{ matrix.name }}_${{ matrix.python-version }}_"
+          os: ${{ matrix.os }}
+          arch: ${{ matrix.arch }}
+
+      - if: ${{ matrix.os == 'almalinux' }}
+        run: |
+          git config --global --add safe.directory /__w/circt/circt
+
+      - name: Setup Z3
+        id: z3
+        uses: cda-tum/setup-z3@v1
+        with:
+          version: 4.13.4
+
+      - name: "Build distro wheel"
+        run: |
+          
+          set -x
+                    
+          $python3_command -m venv venv && source venv/bin/activate
+          pip install setuptools wheel repairwheel
+          
+          # don't build a fat binary
+          if [[ "${{ matrix.os }}" == "macos" ]]; then
+            export CMAKE_OSX_ARCHITECTURES="${{ matrix.arch }}"
+            # prevent universal wheels from being built for macos
+            _PYTHON_HOST_PLATFORM=$(python -c "import sysconfig; print(sysconfig.get_platform())")
+            export _PYTHON_HOST_PLATFORM=$(echo $_PYTHON_HOST_PLATFORM | sed 's/universal2/${{ matrix.arch }}/g')
+          fi
+          
+          CIRCT_SHA_SHORT=$(git rev-parse --short HEAD)
+          DATETIME=$(date +"%Y%m%d%H")
+          sed -i.bak "s/123456654321/$DATETIME+$CIRCT_SHA_SHORT/g" $PWD/pyproject.toml
+          
+          # These two lines get the build requirements from `pyproject.toml`
+          pip install pip-tools
+          pip-compile --all-build-deps -o ./build-reqs.txt ./pyproject.toml
+          # We install them since we're building without isolation.
+          pip install -r ./build-reqs.txt
+          
+          ccache -z
+          pip wheel $PWD -w wheelhouse -v --no-build-isolation
+          ccache -s
+          # repairwheel wheelhouse/circt*whl -o wheelhouse
+
+      - name: "Save cache"
+        uses: actions/cache/save@v3
+        if: ${{ !cancelled() }}
+        with:
+          path: ${{ steps.setup_base.outputs.cache-dir }}
+          key: ${{ env.cache-key }}
+
+      - name: Release current commit
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          artifacts: "wheelhouse/circt*"
+          token: "${{ secrets.GITHUB_TOKEN }}"
+          tag: "latest"
+          name: "latest"
+          removeArtifacts: false
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
+          omitBody: true
+
+      - name: Release current commit
+        uses: ncipollo/release-action@v1.12.0
+        with:
+          owner: makslevental
+          repo: wheels
+          artifacts: "wheelhouse/circt*"
+          token: "${{ secrets.WHEELS_RELEASE }}"
+          tag: "i"
+          name: "i"
+          removeArtifacts: false
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
+          omitBody: true
+          artifactErrorsFailBuild: true

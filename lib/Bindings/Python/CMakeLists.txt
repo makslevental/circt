@@ -56,6 +56,7 @@ set(PYTHON_BINDINGS_LINK_LIBS
   # needed for mlirFrozenRewritePatternSetDestroy
   # but not the actual passes
   MLIRCAPITransforms
+  CIRCTCAPITransforms
 )
 
 if (CIRCT_INCLUDE_TESTS)
@@ -148,15 +149,6 @@ declare_mlir_dialect_python_bindings(
   SOURCES
     dialects/hw.py
   DIALECT_NAME hw)
-
-declare_mlir_dialect_python_bindings(
-  ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
-  ROOT_DIR "${MLIR_MAIN_SRC_DIR}/python/mlir"
-  TD_FILE dialects/IndexOps.td
-  SOURCES
-    dialects/index.py
-  DIALECT_NAME index
-  GEN_ENUM_BINDINGS)
 
 declare_mlir_dialect_python_bindings(
   ADD_TO_PARENT CIRCTBindingsPythonSources.Dialects
@@ -267,7 +259,8 @@ add_mlir_python_common_capi_library(CIRCTBindingsPythonCAPI
   OUTPUT_DIRECTORY "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt/_mlir_libs"
   RELATIVE_INSTALL_ROOT "../../../.."
   DECLARED_SOURCES
-    MLIRPythonSources.Core
+    MLIRPythonSources
+    MLIRPythonExtension.RegisterEverything
     CIRCTBindingsPythonExtension
 )
 
@@ -276,7 +269,8 @@ add_mlir_python_modules(CIRCTPythonModules
   ROOT_PREFIX "${CIRCT_PYTHON_PACKAGES_DIR}/circt_core/circt"
   INSTALL_PREFIX "python_packages/circt_core/circt"
   DECLARED_SOURCES
-    MLIRPythonSources.Core
+    MLIRPythonSources
+    MLIRPythonExtension.RegisterEverything
     CIRCTBindingsPythonExtension
     CIRCTBindingsPythonSources
   COMMON_CAPI_LINK_LIBS
